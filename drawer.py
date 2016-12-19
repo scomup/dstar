@@ -5,6 +5,7 @@ GOAL  = 0
 OBSTACLE = 1
 FREE = 3
 CLOSE = 8
+PATH = 8
 
 class map_drawer(threading.Thread):
     def __init__(self,g_map):
@@ -38,25 +39,27 @@ class map_drawer(threading.Thread):
         map_show_data = self.g_map.map_show_data
         for i in range(len(map_data)):
             for j in range(len(map_data[0])):
+                
+                if map_data[i][j].stat == 'FREE':   
+                    map_show_data[i,j] = FREE
+                elif map_data[i][j].stat == 'OBSTACLE':   
+                    map_show_data[i,j] = OBSTACLE
+
+                #if map_data[i][j].tag == 'CLOSE':
+                #    self.ax.text(j, i, 'X', fontsize = 40 ,va='center', ha='center',color='red')
+                if map_data[i][j].path:
+                    map_show_data[i,j] = PATH
                 if map_data[i][j].stat == 'GOAL':
                     self.ax.text(j, i, 'Goal', va='center', ha='center',color='white')
                     map_show_data[i,j] = GOAL
                 elif map_data[i][j].stat == 'START':
                     self.ax.text(j, i, 'Start', va='center', ha='center',color='white')
                     map_show_data[i,j] = START
-                elif map_data[i][j].stat == 'FREE':   
-                    map_show_data[i,j] = FREE
-                elif map_data[i][j].stat == 'OBSTACLE':   
-                    map_show_data[i,j] = OBSTACLE
-                else:
-                    print 'ERROR!'
-                if map_data[i][j].tag == 'CLOSE':
-                    self.ax.text(j, i, 'X', fontsize = 40 ,va='center', ha='center',color='red')
                     
                 if map_data[i][j].back_point != map_data[i][j]:
-                    a = map_data[i][j].back_point.x - map_data[i][j].x 
-                    b = map_data[i][j].back_point.y - map_data[i][j].y
-                    self.ax.quiver( map_data[i][j].y, map_data[i][j].x,b,-a,color ='white');
+                    a = map_data[i][j].back_point.row - map_data[i][j].row 
+                    b = map_data[i][j].back_point.col - map_data[i][j].col
+                    self.ax.quiver( map_data[i][j].col, map_data[i][j].row,b,-a,color ='white');
         self.ax.imshow(map_show_data, interpolation='none') 
         self.fig.canvas.draw()
     def run(self):

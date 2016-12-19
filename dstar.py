@@ -2,6 +2,8 @@ import numpy as np
 import time
 import threading
 import drawer
+import matplotlib as mpl
+mpl.use('Qt4Agg')
 import matplotlib.pyplot as plt
 import operator
 
@@ -18,20 +20,21 @@ class map_cell:
     def __init__(self,x,y):
         
         self.back_point = self
+        self.path = False
         self.tag = 'NEW'
         self.stat = 'FREE' # FREE OBSTACLE GOAL START
         self.h = 0
         self.k = 0
-        self.x = x # rows
-        self.y = y # cols
+        self.row = x # rows
+        self.col = y # cols
 
     def cost(self,to_ceil):                  
-        a = abs(to_ceil.x - self.x)
-        b = abs(to_ceil.y - self.y)
+        a = abs(to_ceil.row - self.row)
+        b = abs(to_ceil.col - self.col)
         if a > 1 or b > 1:
             print 'COST ERROR'
             return -1
-        elif to_ceil.stat == 'OBSTACLE':
+        elif to_ceil.stat  == 'OBSTACLE' or self.stat == 'OBSTACLE':
             return INF
         elif a == 0 or b == 0:
             return 1
@@ -69,8 +72,12 @@ class dstar_planner(threading.Thread):
     def insert(self,cell,h_new):
         if cell.tag == 'NEW':
             cell.k = h_new
-        else:
+        elif cell.tag == 'OPEN':
             cell.k = min(h_new,cell.k)
+        elif cell.tag == 'CLOSE':
+            cell.k = min(h_new,cell.h)
+        else:
+            print 'error_insert'
         cell.h = h_new
         if cell.tag != 'OPEN':
             cell.tag = 'OPEN'
@@ -82,12 +89,12 @@ class dstar_planner(threading.Thread):
         cols = len(self.grid_map.map_data[0])
         for i in range(-1,2):
             for j in range(-1,2):
-                if (cell.x + i < rows ) and (cell.x + i >= 0 ) and (cell.y + j < cols ) and (cell.y + j >= 0 ): 
+                if (cell.row + i < rows ) and (cell.row + i >= 0 ) and (cell.col + j < cols ) and (cell.col + j >= 0 ): 
                     if i == 0 and j == 0:
                         continue
-                    #if self.grid_map.map_data[cell.x + i][cell.y + j].tag == 'CLOSE':
+                    #if self.grid_map.map_data[cell.row + i][cell.col + j].tag == 'CLOSE':
                     #    continue
-                    tmp.append(self.grid_map.map_data[cell.x + i][cell.y + j])
+                    tmp.append(self.grid_map.map_data[cell.row + i][cell.col + j])
         return tmp
 
     def clear_close(self):
@@ -107,18 +114,27 @@ class dstar_planner(threading.Thread):
         cell_c.tag = 'CLOSE'
         if cell_c == end_cell:
             return -1
-        if cell_c == None or cell_c.stat == 'START':
+        if cell_c == None or cell_c == end_cell:
             return -1
         k_old = cell_c.k
         neighbor = self.neighbor(cell_c)
         if k_old < cell_c.h:
             for cell in neighbor:
-                if cell.tag == 'NEW' and cell.h < k_old and cell_c.h > cell_c.cost(cell) + cell.h:
+                if cell.tag == 'NEW':
+                    #print 'TODO'
+                    #cell_c.back_point = cell
+                    #cell_c.h = cell_c.cost(cell) + cell.h
+                    self.insert(cell, cell_c.cost(cell) + cell_c.h)
+                elif  (cell.back_point != cell_c and cell_c.h > cell_c.cost(cell) + cell.h):
                     cell_c.back_point = cell
-                    cell_c.h = cell_c.cost(cell) + cell.h
+                    #cell_c.h = cell_c.cost(cell) + cell.h
+                    self.insert(cell, cell.h)
+                elif cell.back_point == cell_c and cell.h != cell_c.cost(cell) + cell_c.h:
+                    self.insert(cell, cell_c.cost(cell) + cell_c.h)
+                    
         if k_old == cell_c.h:
             for cell in neighbor:
-                if cell.tag == 'NEW' or (cell.back_point == cell_c and cell.h != cell.x + cell_c.cost(cell) + cell_c.h) or (cell.back_point != cell_c and cell.h >  cell_c.cost(cell) + cell_c.h):
+                if cell.tag == 'NEW' or (cell.back_point == cell_c and cell.h != cell_c.cost(cell) + cell_c.h) or (cell.back_point != cell_c and cell.h >  cell_c.cost(cell) + cell_c.h):
                     cell.back_point = cell_c
                     self.insert(cell, cell_c.cost(cell) + cell_c.h)
                     
@@ -129,54 +145,46 @@ class dstar_planner(threading.Thread):
             #raw_input('Press any key to next step ...')
             k = planner.process_state(self.grid_map.start)
             #self.drawer.update_plot()
-    def modify_cost(self,cell,cost):
-        self.insert(cell, cost)
-    def prepare_repair(self,cell_c):
-        neighbor = self.neighbor(cell_c)
-        for cell in neighbor:
-            if (cell.k == INF and cell.stat != 'OBSTACLE') or (cell.k != INF and cell.stat == 'OBSTACLE'):
-                if(cell.tag == 'CLOSE'):
-                    self.insert(cell,INF)
 
     def sensor(self,cell):
             if (cell.k == INF and cell.stat != 'OBSTACLE') or (cell.k != INF and cell.stat == 'OBSTACLE'):
                 self.insert(cell,cell.h)
                 neighbor = self.neighbor(cell)
                 for c in neighbor:
-                    self.insert(c,c.h)
+                    if c.back_point == cell:
+                        self.insert(c,cell.cost(c) + cell.h)
+                    else:
+                        self.insert(c,c.h)
                 return True
             else:
                 return False
-
-    def prepare_replan(self,cell_c):
-        while True:
-            kmin = self.process_state(grid_map.start)
-            if kmin == -1 or kmin >= cell_c.h:
-                break
 
     def run(self):
         print '============= init plan start ==============='
         self.init_plan()
         self.drawer.update_plot()
         print '============= init plan end ================='
-        grid_map.map_data[3][3].stat = 'OBSTACLE'
-        #self.clear_close()
         cell_c = self.grid_map.start
         while cell_c != self.grid_map.goal:
             next_cell = cell_c.back_point
             if self.sensor(next_cell):
+                print 'oooh! have a OBSTACLE, try to compute new path'
                 k = 0
                 while k != -1:
-                    self.process_state(cell_c)
-                    self.drawer.update_plot()
-                    raw_input()
-            cell_c = next_cell 
+                    k = self.process_state(None)
+                    if cell_c.h < k:
+                        break
+                    #raw_input()
+                    #self.drawer.update_plot()
+            cell_c = cell_c.back_point
+            cell_c.path = True
+            self.drawer.update_plot()
+            print 'Press any key to go...'
+            raw_input()
 
-
-            
                 
 if __name__ == '__main__':
-    grid_map = grid_map(6,7)
+    grid_map = grid_map(10,10)
     grid_map.set_goal(0,6)
     grid_map.set_start(5,1)
     grid_map.map_data[0][1].stat = 'OBSTACLE'
@@ -192,53 +200,9 @@ if __name__ == '__main__':
 
     planner = dstar_planner(grid_map)
     planner.insert(grid_map.goal,0)
-    #planner.drawer.run()
-    #test = showTrajectory()
-    #test.start()
-    #planner.drawer.start()    
-    #self.fig.canvas.draw() 
+    planner.setDaemon(True)
     planner.start()
-    #drawer = drawer.map_drawer(grid_map)
-    planner.drawer.run()
-    #while k != -1:
-    #    k = planner.process_state()
-    #    planner.drawer.update_plot()
-    #    planner.drawer.fig.canvas.draw()
-    #    plt.cla()   
-    #    time.sleep(1)
-        #raw_input('pause : press any key ...')
-    print 'end'
-            
-    
-
-#grid_map = grid_map(6,7)
-#grid_map.set_goal(0,6)
-#grid_map.set_start(5,1)
-#planner = dstar_planner(grid_map)
-#planner.insert(grid_map.goal,0)
-#planner.drawer.update_plot()
-#planner.drawer.start()
-#k = 0
-#i = 0
-#step =300
-##while k != -1 and i <step:
-##    k = planner.process_state()
-#    #if i == step -1 or k == -1:
-#    #    grid_map.update_plot(show_map)
-#     #   fig.canvas.draw()
-##    i = i+1
-#
-## 
-##plt.quiver(1,1,-1,1,color ='white'); plt.quiver(2,1,0,1,color ='white'); plt.quiver(3,1,1,1,color ='white')
-##plt.quiver(1,2,-1,0,color ='white');                                      plt.quiver(3,2,1,0,color ='white')
-##plt.quiver(1,3,-1,-1,color ='red');  plt.quiver(2,3,0,-1,color ='white'); plt.quiver(3,3,1,-1,color ='white')        
-#
-#
-##cid = fig.canvas.mpl_connect('button_press_event', onclick)
-#while True:
-#    time.sleep(1e-6)
-#print 'end'
-#plt.show()
-
-
-
+    try : 
+        planner.drawer.run()
+    except KeyboardInterrupt:
+        print "Bye"
